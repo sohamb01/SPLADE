@@ -165,6 +165,7 @@ Results are collected in the data frame `datfin`, which is printed at the end an
   journal = {Preprint},
   year    = {2025},
 }
+```
 
 ## 3D Extension: Fibre System Analysis
 
