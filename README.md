@@ -159,7 +159,7 @@ Results are collected in the data frame `datfin`, which is printed at the end an
 
 ## Citation
 ```bibtex
-@article{bonnerjee2025splade,
+@article{bonnerjee2025fast,
   title   = {Fast and provably accurate detection of anomalous patches for spatial data},
   author  = {Bonnerjee, S. and Karmakar, S. and Michailidis, G.},
   journal = {Preprint},
