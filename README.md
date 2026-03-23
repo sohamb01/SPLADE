@@ -7,7 +7,7 @@ This repository contains the official implementation for the paper: **Fast local
 
 ## Overview
 
-SPLADE (**SP**atial patch **L**ocalization of **A**nomalies under **DE**pendence) is a two-stage, scalable algorithm for detecting and localizing multiple axis-aligned rectangular anomalous patches in 2D spatial grids under general spatial dependence. The method is provably accurate, achieves near-linear runtime O(n) in favorable signal regimes, and accommodates heavy-tailed noise under only mild moment assumptions — substantially generalizing the existing literature which largely assumes independence or restrictive m-dependence structures.
+SPLADE (**SP**atial patch **L**ocalization of **A**nomalies under **DE**pendence) is a two-stage, scalable algorithm for detecting and localizing multiple axis-aligned rectangular anomalous patches in 2D spatial grids under general spatial dependence. The method is provably accurate, achieves near-linear runtime O(n) in favorable signal regimes, and accommodates heavy-tailed noise under only mild moment assumptions — substantially generalizing the existing literature which largely assumes independence or restrictive m-dependence structures. The following implementation tackles the 2-dimensional case ($d=2$). 
 
 ---
 
@@ -165,5 +165,88 @@ Results are collected in the data frame `datfin`, which is printed at the end an
   journal = {Preprint},
   year    = {2025},
 }
+
+## 3D Extension: Fibre System Analysis
+
+The following files extend SPLADE to **three-dimensional** spatial arrays (volumetric grids), targeting the fibre-reinforced polymer application described in Appendix G of the paper. The algorithms are direct 3D analogues of Algorithms 1 and 2, replacing 2D rectangles with axis-aligned rectangular prisms and using 3D prefix sums and 3D FFT-based LRV estimation.
+
+### Additional Files
 ```
-EOF
+├── multiple_cp_helper_3d.R    # Core 3D Algorithm 1 and Algorithm 2
+├── LRV_helper_3d.R            # 3D FFT-based long-run variance estimator
+├── quantile_calc_simu_3d.R    # Monte Carlo threshold calibration (3D)
+├── run_one_simulation_3d.R    # Self-contained 3D simulation example
+└── fibre_anomaly_main.R       # Real-data driver for fibre direction datasets
+```
+
+### `multiple_cp_helper_3d.R`
+3D counterpart of `multiple_cp_helper.R`. Contains:
+
+- **`prefix_sum3d(A)`** — Builds the 3D summed-volume table (prefix sum) of an n1×n2×n3 array via three sequential cumsum passes, enabling O(1) box sum queries via inclusion-exclusion over 8 corners.
+- **`box_sum3d(cs, s, t)`** — Returns the sum over the rectangular prism with corners `s = (i1,j1,k1)` and `t = (i2,j2,k2)` from the 3D prefix array.
+- **`box_sums_from_cs3d(cs, i1, i2, j1, j2, k1, k2)`** — Vectorized version of `box_sum3d` for simultaneous computation over many boxes, used in threshold simulation.
+- **`single_sp_changepoint_3d(X, alpha, kappa, ...)`** — Implements **Algorithm 1** in 3D: sub-samples the volume on a coarse grid, finds a preliminary prism estimate, then refines within local band neighborhoods around each face.
+- **`multiple_sp_changepoints_3d(X, alpha, kappa, Q, connectivity, ...)`** — Implements **Algorithm 2** in 3D (SPLADE-3D): partitions the volume into blocks, flags blocks exceeding threshold Q, extracts 3D connected components (supporting 6-, 18-, or 26-connectivity), and applies `single_sp_changepoint_3d` within each candidate region.
+- **`epi_mean_3d(tau1, tau2, delta, N)`** — Constructs the n1×n2×n3 mean array for K rectangular prism patches specified by fractional endpoints `tau1`, `tau2` (K×3 matrices) and jump sizes `delta`.
+- **`simulate.sar.3d(n, rho, spatial.var)`** — Generates a 3D SAR field of size `n = c(n1, n2, n3)` with spatial correlation `rho` via iterative 6-neighbor averaging until convergence.
+
+### `LRV_helper_3d.R`
+Long-run variance estimation for 3D fields:
+
+- **`lrv_estimator_fft_3d(X, alpha, Bn_pow, kernel)`** — Estimates σ² from a 3D array using zero-padded 3D FFT autocorrelation with a separable Epanechnikov product kernel. Block-mean centering is applied first (using the same block construction as Algorithm 2) to reduce bias from the anomalous region. The bandwidth vector is `Bn = (n1^Bn_pow, n2^Bn_pow, n3^Bn_pow)`.
+- **`K_epanechnikov(u)`** — 1D Epanechnikov kernel (shared with 2D version).
+
+### `quantile_calc_simu_3d.R`
+Monte Carlo threshold calibration for 3D block means:
+
+- **`simulate_Q_blockmeans_3d(n, alpha, sigma2, nsim, seed, alpha_q, progress)`** — Direct 3D analogue of `simulate_Q_blockmeans`. Simulates `nsim` Gaussian null volumes, computes the maximum absolute block mean over all Algorithm-2-style prism blocks (using `box_sums_from_cs3d`), and returns the (1 − α)-quantile as Q. Accepts either a scalar or a 3D array for `sigma2`.
+
+### `run_one_simulation_3d.R`
+Self-contained end-to-end script for a synthetic 3D experiment. Demonstrates the full pipeline:
+1. Define K=3 rectangular prism patches via fractional endpoints `tau1`, `tau2`
+2. Simulate a 3D SAR(ρ) noise field with `simulate.sar.3d`
+3. Estimate the LRV with `lrv_estimator_fft_3d`
+4. Calibrate Q with `simulate_Q_blockmeans_3d` (both estimated and oracle LRV)
+5. Run `multiple_sp_changepoints_3d` and evaluate
+
+### `fibre_anomaly_main.R`
+Real-data driver for the glass fibre-reinforced polymer analysis (Appendix G). Reads MAVI-processed fibre direction CSV data and runs the full 3D SPLADE pipeline on a chosen direction attribute. Steps:
+1. **Load & preprocess** — calls `load_fibre_data()` (from `preprocess_fibre_data.R`) to read the CSV and populate six direction arrays (`x_abs`, `y_abs`, `z_abs`, etc.) on the voxel grid
+2. **Select attribute** — one of `"x"`, `"y"`, `"z"`, `"x_abs"`, `"y_abs"`, `"z_abs"`, or `"aniso"`
+3. **LRV estimation** — `lrv_estimator_fft_3d`
+4. **Threshold calibration** — `simulate_Q_blockmeans_3d` with the estimated LRV
+5. **Detection** — `multiple_sp_changepoints_3d` with 26-connectivity
+6. **Output** — prints estimated patch bounding boxes in both grid indices and fractional coordinates
+
+### Quick Start (3D)
+```r
+source("multiple_cp_helper_3d.R")
+source("LRV_helper_3d.R")
+source("quantile_calc_simu_3d.R")
+
+N   <- c(60, 60, 60)
+rho <- 0.3
+tau1 <- rbind(c(0.10, 0.10, 0.10), c(0.50, 0.10, 0.55))
+tau2 <- rbind(c(0.30, 0.35, 0.35), c(0.75, 0.35, 0.85))
+delta <- c(0.8, -0.8)
+
+mu  <- epi_mean_3d(tau1, tau2, delta, N)
+Z   <- simulate.sar.3d(n = N, rho = rho, spatial.var = 1)
+X   <- Z + mu
+
+lrv_est <- lrv_estimator_fft_3d(X, alpha = 0.5, Bn_pow = 1/3)
+resQ    <- simulate_Q_blockmeans_3d(n = N, alpha = 0.5, sigma2 = lrv_est,
+                                    nsim = 500, seed = 123)
+
+res <- multiple_sp_changepoints_3d(X, alpha = 0.5, kappa = 0.01,
+                                   Q = resQ$Q, connectivity = 26L)
+cat("K_hat:", res$K_hat, "\n")
+print(res$I_bounds)
+```
+
+### Fibre Data Analysis
+```r
+# Requires: preprocess_fibre_data.R, plot_helper_3d.R
+source("fibre_anomaly_main.R")
+# Edit 'attribute' at the top of fibre_anomaly_main.R to switch
+# between fibre directions: "x_abs", "y_abs", "z_abs", etc.
