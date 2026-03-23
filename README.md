@@ -3,8 +3,6 @@ This repository contains the official implementation for the paper: **Fast local
 
 **Authors:** S. Bonnerjee (University of Chicago), S. Karmakar (University of Florida), G. Michailidis (UCLA)
 
-**Journal:** *Biometrika* (2025)
-
 ---
 
 ## Overview
