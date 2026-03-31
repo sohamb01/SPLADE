@@ -1,5 +1,5 @@
 # SPLADE
-This repository contains the official implementation for the paper: **Fast localization of anomalous patches in spatial data under dependence.**
+This repository contains the official implementation for the paper: **Fast localization of anomalous patches in spatial data under dependence.** ArXiv: 2603.27546
 
 **Authors:** S. Bonnerjee (University of Chicago), S. Karmakar (University of Florida), G. Michailidis (UCLA).
 
